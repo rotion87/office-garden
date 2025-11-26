@@ -197,7 +197,7 @@
   <div class="topbar">
     <div>
       <div class="title">OFFICE GARDEN / TEXT RPG</div>
-      <div class="subtitle">上班偷閒小花園　── DOS 風小視窗，內建被抓包風險</div>
+      <div class="subtitle">上班偷閒小花園　── DOS 風小視窗，內建被抓包風險＆重來機制</div>
     </div>
     <button class="btn-stealth" id="toggleStealth">STEALTH MODE</button>
   </div>
@@ -219,7 +219,7 @@
         </div>
         <div class="hint">
           熱鍵：Z=種植　X=澆水　C=放空　V=下一天　S=偽裝模式<br>
-          進度會存到這台電腦，同一個瀏覽器下次開可以接著玩。
+          遊戲會存到這台電腦裡，被抓包的話會整局重來。
         </div>
       </div>
 
@@ -261,7 +261,7 @@
   // =============================
   //         基本狀態
   // =============================
-  const SAVE_KEY = "officeGardenTextRPG_DOS_TW_v2";
+  const SAVE_KEY = "officeGardenTextRPG_DOS_TW_gameover";
 
   let state = {
     day: 1,
@@ -272,9 +272,9 @@
     stealthCount: 0,    // 上班偽裝次數
     activeTime: 0,      // 遊戲畫面累積秒數
     suspicion: 0,       // 0–100 被抓包風險
-    timesCaught: 0,     // 被抓包次數
     achievementsUnlocked: [],
-    logIntroShown: false
+    logIntroShown: false,
+    gameOver: false     // 是否已經 GAME OVER
   };
 
   // 載入存檔
@@ -287,8 +287,8 @@
       if (state.stealthCount == null) state.stealthCount = 0;
       if (state.activeTime == null) state.activeTime = 0;
       if (state.suspicion == null) state.suspicion = 0;
-      if (state.timesCaught == null) state.timesCaught = 0;
       if (!Array.isArray(state.achievementsUnlocked)) state.achievementsUnlocked = [];
+      if (state.gameOver == null) state.gameOver = false;
     } catch(e) {
       console.warn("存檔壞掉，改用預設值");
     }
@@ -342,8 +342,7 @@
     extraStatus.innerHTML = `
       上班偽裝次數：${state.stealthCount} 次<br>
       在花園偷閒時間：${formatTime(state.activeTime)}<br>
-      累計種下種子：${state.totalPlanted} 顆<br>
-      被抓包記錄：${state.timesCaught} 次
+      累計種下種子：${state.totalPlanted} 顆
     `;
   }
 
@@ -394,12 +393,6 @@
       name: "穩穩偷閒",
       desc: "同時擁有至少 5 株植物，風險還維持在 40 以下。",
       check: (s) => s.plants.length >= 5 && s.suspicion < 40
-    },
-    {
-      id: "caught_once",
-      name: "被抓過還不怕",
-      desc: "正式被抓包過一次，但你還是回來繼續種。",
-      check: (s) => s.timesCaught >= 1
     }
   ];
 
@@ -436,9 +429,41 @@
   }
 
   // =============================
+  //        GAME OVER / 重來
+  // =============================
+  function resetGame() {
+    localStorage.removeItem(SAVE_KEY);
+    location.reload();
+  }
+
+  function triggerGameOver() {
+    if (state.gameOver) return;
+    state.gameOver = true;
+    log("🕶️ 今天主管突然叫你去小房間聊聊，語氣非常關心但眼神不太對勁。");
+    log("你隱約感覺到，最近偷閒偷太兇這件事，終於還是被看出來了。");
+    log("你的偷閒小花園被迫關閉，只剩下黑色的螢幕倒映著你的臉。");
+
+    saveGame();
+
+    setTimeout(() => {
+      alert("你被主管正式抓包，這一輪遊戲結束，準備重新開始。");
+      resetGame();
+    }, 300);
+  }
+
+  // =============================
   //        行為邏輯
   // =============================
+  function ensureAlive() {
+    if (state.gameOver) {
+      log("系統：這一輪已經結束了，請重新整理或等自動重來。");
+      return false;
+    }
+    return true;
+  }
+
   function doPlant() {
+    if (!ensureAlive()) return;
     if (state.energy <= 0) return log("你今天已經懶到連彎腰種東西都不想。");
     if (state.seeds <= 0) return log("口袋翻一圈，今天的種子已經全用光了。");
     if (state.plants.length >= 8) return log("這塊小角落暫時容不下更多植物，太明顯會被發現。");
@@ -446,7 +471,7 @@
     state.energy--;
     state.seeds--;
     state.totalPlanted++;
-    addSuspicion(10); // 種東西很明顯，在偷閒
+    addSuspicion(10); // 種東西很明顯在偷閒
 
     const names = ["桌角小草", "會議室盆栽", "加班仙人掌", "咖啡樹苗", "窗邊小葉子"];
     const plant = {
@@ -463,6 +488,7 @@
   }
 
   function doWater() {
+    if (!ensureAlive()) return;
     if (state.energy <= 0) return log("你拿起水壺，又放回去。覺得今天就先這樣吧。");
     if (state.plants.length === 0) return log("花園裡還空空的，只有土跟你的上班靈魂。");
 
@@ -481,6 +507,7 @@
   }
 
   function doRest() {
+    if (!ensureAlive()) return;
     if (state.energy <= 0) return log("你已經在放空了，再放下去可能會直接睡著。");
     state.energy = 0;
     addSuspicion(6); // 明顯沒在工作
@@ -496,34 +523,15 @@
   }
 
   // =============================
-  //    根據風險觸發事件（被抓包等）
+  //    根據風險觸發事件（包含 GAME OVER）
   // =============================
-  function handleSuspicionEvents() {
+  function handleSuspicionAndEvents() {
     if (state.suspicion >= 100) {
-      // 正式被抓包
-      state.timesCaught++;
-      log("今天主管直接叫你過去聊聊，感覺你最近『狀態怪怪的』。");
-      log("你只好假裝很檢討，回座位時發現花園一片空白，好像什麼都沒發生過。");
-      state.plants = [];
-      state.seeds = Math.max(0, state.seeds - 2);
-      state.suspicion = 40; // 還是有點陰影
-      checkAchievements();
-      return true; // 已經處理重大事件
+      triggerGameOver();
+      return;
     }
 
-    if (state.suspicion >= 70) {
-      // 高風險：有機率被關切
-      if (Math.random() < 0.6) {
-        log("主管今天特別常在你座位附近晃來晃去，你決定明天還是低調一點。");
-        // 隔天可用體力少一點
-        state.energy = Math.max(1, state.energy - 1);
-        return false;
-      }
-    }
-    return false;
-  }
-
-  function randomEvent() {
+    // 一般隨機事件
     const r = Math.random();
 
     if (r < 0.2) {
@@ -550,18 +558,14 @@
   }
 
   function nextDay() {
+    if (!ensureAlive()) return;
     state.day++;
     state.energy = 3;
 
     // 每天結算風險：稍微自然下降
     state.suspicion = Math.max(0, state.suspicion - 15);
 
-    // 先看風險會不會觸發重大事件
-    const caught = handleSuspicionEvents();
-    if (!caught) {
-      randomEvent();
-    }
-
+    handleSuspicionAndEvents();
     updateStatus();
     checkAchievements();
   }
@@ -570,7 +574,7 @@
   //   計時（只算遊戲畫面，不算偽裝）
   // =============================
   setInterval(() => {
-    if (!document.body.classList.contains("stealth")) {
+    if (!document.body.classList.contains("stealth") && !state.gameOver) {
       state.activeTime += 1;
       updateStatus();
       checkAchievements();
@@ -583,7 +587,7 @@
   // =============================
   function toggleStealth() {
     const entering = !document.body.classList.contains("stealth");
-    if (entering) {
+    if (entering && !state.gameOver) {
       state.stealthCount++;
       // 裝忙一下，風險稍微往下掉
       state.suspicion = Math.max(0, state.suspicion - 5);
