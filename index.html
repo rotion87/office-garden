@@ -1,35 +1,552 @@
 <!doctype html>
 <html lang="zh-Hant">
 <head>
-  <meta charset="utf-8" />
-  <title>辦公室偷閒小花園 🌱</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="stylesheet" href="style.css" />
+  <meta charset="utf-8">
+  <title>上班偷閒小花園｜DOS 文字冒險版</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin:0;
+      padding:12px;
+      background:#000;
+      color:#e5e5e5;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size:13px;
+    }
+
+    .wrap {
+      max-width:900px;
+      margin:0 auto;
+      border:1px solid #777;
+      padding:8px;
+    }
+
+    .topbar {
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      border-bottom:1px solid #555;
+      padding-bottom:4px;
+      margin-bottom:4px;
+    }
+
+    .title {
+      font-weight:bold;
+      text-transform:uppercase;
+      letter-spacing:1px;
+    }
+
+    .subtitle {
+      font-size:11px;
+      color:#b0b0b0;
+    }
+
+    button {
+      font-family:inherit;
+      font-size:11px;
+      padding:2px 8px;
+      border:1px solid #888;
+      background:#111;
+      color:#e5e5e5;
+      cursor:pointer;
+    }
+
+    button:hover {
+      background:#222;
+    }
+
+    .btn-stealth {
+      text-transform:uppercase;
+    }
+
+    .main {
+      display:flex;
+      gap:8px;
+    }
+
+    .panel {
+      border:1px solid #666;
+      padding:6px;
+    }
+
+    .panel-left { flex:2; }
+    .panel-right { flex:1; }
+
+    .panel-title {
+      font-weight:bold;
+      margin-bottom:4px;
+      border-bottom:1px solid #555;
+      padding-bottom:2px;
+      text-transform:uppercase;
+      font-size:11px;
+    }
+
+    .status {
+      font-size:11px;
+      display:flex;
+      flex-wrap:wrap;
+      gap:6px;
+      margin-bottom:4px;
+    }
+
+    .status span {
+      border:1px solid #555;
+      padding:1px 4px;
+    }
+
+    .extraStatus {
+      font-size:11px;
+      color:#c0c0c0;
+      margin-bottom:4px;
+      line-height:1.4;
+    }
+
+    .log {
+      border:1px solid #555;
+      padding:4px;
+      height:220px;
+      overflow-y:auto;
+      white-space:pre-wrap;
+      background:#050505;
+      font-size:12px;
+    }
+
+    .controls {
+      margin-top:4px;
+      display:flex;
+      flex-wrap:wrap;
+      gap:4px;
+    }
+
+    .hint {
+      font-size:10px;
+      color:#9a9a9a;
+      margin-top:3px;
+    }
+
+    .achv-list {
+      font-size:11px;
+      line-height:1.4;
+    }
+
+    .achv-item { margin-bottom:3px; }
+
+    .achv-tag {
+      display:inline-block;
+      min-width:52px;
+      border:1px solid #555;
+      text-align:center;
+      margin-right:4px;
+      font-size:10px;
+      padding:0 2px;
+    }
+
+    .achv-tag.locked {
+      color:#777;
+      border-color:#444;
+    }
+
+    .achv-tag.ok {
+      color:#00ff66;
+      border-color:#00ff66;
+    }
+
+    .achv-name {
+      font-weight:bold;
+    }
+
+    .achv-desc {
+      color:#b0b0b0;
+      font-size:10px;
+      margin-left:56px;
+    }
+
+    /* 偽裝模式：隱藏遊戲，用假工作畫面取代 */
+    body.stealth .game-area { display:none; }
+    body.stealth .stealth-area { display:block; }
+
+    .stealth-area {
+      display:none;
+      border:1px solid #666;
+      padding:6px;
+      margin-top:4px;
+      font-size:12px;
+    }
+
+    .fake-row {
+      display:flex;
+      justify-content:space-between;
+      border-bottom:1px dashed #444;
+      padding:2px 0;
+    }
+
+    .fake-label {
+      color:#ccc;
+    }
+
+    .fake-value {
+      color:#e5e5e5;
+    }
+  </style>
 </head>
 <body>
+<div class="wrap">
 
-  <div class="app">
-    <h1>辦公室偷閒小花園 🌱</h1>
-    <div class="subtitle">
-      填好名字、點一下草地，就能種下一棵屬於你的植物。<br>
-      所有人打開同一個網址，會看到同一片花園。
+  <div class="topbar">
+    <div>
+      <div class="title">OFFICE GARDEN / TEXT RPG</div>
+      <div class="subtitle">上班偷閒小花園　── 單機、小小一格 DOS 風視窗</div>
     </div>
+    <button class="btn-stealth" id="toggleStealth">STEALTH MODE</button>
+  </div>
 
-    <div id="garden"></div>
+  <!-- 遊戲畫面 -->
+  <div class="game-area">
+    <div class="main">
+      <!-- 左側：主遊戲 -->
+      <div class="panel panel-left">
+        <div class="panel-title">GARDEN STATUS</div>
+        <div class="status" id="statusBar"></div>
+        <div class="extraStatus" id="extraStatus"></div>
+        <div class="log" id="logBox"></div>
+        <div class="controls">
+          <button id="btnPlant">[Z] 種一顆種子</button>
+          <button id="btnWater">[X] 巡視＋澆水</button>
+          <button id="btnRest">[C] 放空一下</button>
+          <button id="btnNext">[V] 結束今天</button>
+        </div>
+        <div class="hint">
+          熱鍵：Z=種植　X=澆水　C=放空　V=下一天　S=偽裝模式<br>
+          進度會存到這台電腦裡，下次開同一個瀏覽器可以繼續玩。
+        </div>
+      </div>
 
-    <div class="controls">
-      <input id="nameInput" placeholder="輸入你的名字" />
-      <button id="saveName">設定名稱</button>
-      <button id="randomPlant">隨機種一棵</button>
-    </div>
-
-    <div class="hint">
-      ✅ 先設定名字再種植物<br>
-      💧 之後可加入澆水升級玩法
+      <!-- 右側：成就 -->
+      <div class="panel panel-right">
+        <div class="panel-title">ACHIEVEMENT</div>
+        <div class="achv-list" id="achvList"></div>
+      </div>
     </div>
   </div>
 
-  <!-- 一定要 type="module" -->
-  <script type="module" src="app.js"></script>
+  <!-- 偽裝畫面：看起來很像在看工作進度 -->
+  <div class="stealth-area">
+    <div class="panel-title">DAILY WORK SUMMARY</div>
+    <div class="fake-row">
+      <div class="fake-label">項目 01</div>
+      <div class="fake-value">檢查本週專案進度</div>
+    </div>
+    <div class="fake-row">
+      <div class="fake-label">項目 02</div>
+      <div class="fake-value">整理銷售數字＆KPI</div>
+    </div>
+    <div class="fake-row">
+      <div class="fake-label">項目 03</div>
+      <div class="fake-value">規劃下週待辦清單</div>
+    </div>
+    <div class="fake-row">
+      <div class="fake-label">項目 04</div>
+      <div class="fake-value">回覆同事訊息與需求</div>
+    </div>
+    <div class="hint">
+      ※ 看起來很像工作畫面，其實只是暫停遊戲。再按一次「STEALTH MODE」就能回到花園繼續偷閒。
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // =============================
+  //         基本狀態
+  // =============================
+  const SAVE_KEY = "officeGardenTextRPG_DOS_TW";
+
+  let state = {
+    day: 1,
+    energy: 3,
+    seeds: 3,
+    plants: [],        // {id,name,stage,health}
+    totalPlanted: 0,   // 累計種過幾顆
+    stealthCount: 0,   // 上班偽裝次數
+    activeTime: 0,     // 遊戲畫面累計秒數
+    achievementsUnlocked: [], // 已解鎖成就 id
+    logIntroShown: false
+  };
+
+  // 載入存檔
+  const saved = localStorage.getItem(SAVE_KEY);
+  if (saved) {
+    try {
+      const parsed = JSON.parse(saved);
+      Object.assign(state, parsed);
+      if (state.totalPlanted == null) state.totalPlanted = 0;
+      if (state.stealthCount == null) state.stealthCount = 0;
+      if (state.activeTime == null) state.activeTime = 0;
+      if (!Array.isArray(state.achievementsUnlocked)) state.achievementsUnlocked = [];
+    } catch(e) {
+      console.warn("存檔壞掉，改用預設值");
+    }
+  }
+
+  const statusBar = document.getElementById("statusBar");
+  const extraStatus = document.getElementById("extraStatus");
+  const logBox = document.getElementById("logBox");
+  const achvList = document.getElementById("achvList");
+
+  function saveGame() {
+    localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+  }
+
+  function log(text) {
+    const prefix = `DAY ${state.day} > `;
+    logBox.textContent += prefix + text + "\n";
+    logBox.scrollTop = logBox.scrollHeight;
+    saveGame();
+  }
+
+  function formatTime(sec) {
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    return `${h}小時 ${m}分 ${s}秒`;
+  }
+
+  function updateStatus() {
+    const plantCount = state.plants.length;
+    const mature = state.plants.filter(p => p.stage >= 3).length;
+
+    statusBar.innerHTML = `
+      <span>第 ${state.day} 天</span>
+      <span>體力 ${state.energy}/3</span>
+      <span>種子 ${state.seeds}</span>
+      <span>植物 ${plantCount}</span>
+      <span>成熟 ${mature}</span>
+    `;
+
+    extraStatus.innerHTML = `
+      上班偽裝次數：${state.stealthCount} 次<br>
+      在花園偷閒時間：${formatTime(state.activeTime)}<br>
+      累計種下種子：${state.totalPlanted} 顆
+    `;
+  }
+
+  function initIntro() {
+    if (state.logIntroShown) return;
+    log("你在螢幕的一小角，開了一個只屬於自己的『上班偷閒小花園』。");
+    log("外面看起來是工作視窗，其實裡面默默地種著幾顆沒人知道的植物。");
+    state.logIntroShown = true;
+  }
+
+  // =============================
+  //       成就系統
+  // =============================
+  const ACHIEVEMENTS = [
+    {
+      id: "first_plant",
+      name: "第一顆先種再說",
+      desc: "種下人生（？）第一顆偷閒用的種子。",
+      check: (s) => s.totalPlanted >= 1
+    },
+    {
+      id: "ten_plants",
+      name: "小花園管理員",
+      desc: "累計種下 10 顆以上的種子，開始有點認真經營。",
+      check: (s) => s.totalPlanted >= 10
+    },
+    {
+      id: "stealth_5",
+      name: "偽裝老手",
+      desc: "啟動上班偽裝模式 5 次以上，切換視窗非常熟練。",
+      check: (s) => s.stealthCount >= 5
+    },
+    {
+      id: "time_10min",
+      name: "偷閒專業戶",
+      desc: "在花園畫面裡待滿 10 分鐘，混得很安靜但很徹底。",
+      check: (s) => s.activeTime >= 600
+    },
+    {
+      id: "day_10",
+      name: "加班戰士",
+      desc: "在這個花園裡活過 10 天，代表你上班也活過了不少天。",
+      check: (s) => s.day >= 10
+    }
+  ];
+
+  function renderAchievements() {
+    achvList.innerHTML = "";
+    ACHIEVEMENTS.forEach(a => {
+      const unlocked = state.achievementsUnlocked.includes(a.id);
+      const div = document.createElement("div");
+      div.className = "achv-item";
+      div.innerHTML = `
+        <span class="achv-tag ${unlocked ? "ok" : "locked"}">
+          ${unlocked ? "已解鎖" : "未解鎖"}
+        </span>
+        <span class="achv-name">${a.name}</span>
+        <div class="achv-desc">${a.desc}</div>
+      `;
+      achvList.appendChild(div);
+    });
+  }
+
+  function checkAchievements() {
+    let unlockedAny = false;
+    ACHIEVEMENTS.forEach(a => {
+      if (!state.achievementsUnlocked.includes(a.id) && a.check(state)) {
+        state.achievementsUnlocked.push(a.id);
+        log(`📎 成就解鎖：${a.name}`);
+        unlockedAny = true;
+      }
+    });
+    if (unlockedAny) {
+      renderAchievements();
+      saveGame();
+    }
+  }
+
+  // =============================
+  //        行為邏輯
+  // =============================
+  function doPlant() {
+    if (state.energy <= 0) return log("你今天已經懶到連彎腰種東西都不想。");
+    if (state.seeds <= 0) return log("口袋翻一圈，今天的種子已經全用光了。");
+    if (state.plants.length >= 8) return log("這塊小小的角落暫時容不下更多植物。");
+
+    state.energy--;
+    state.seeds--;
+    state.totalPlanted++;
+
+    const names = ["桌角小草", "會議室盆栽", "加班仙人掌", "咖啡樹苗", "窗邊小葉子"];
+    const plant = {
+      id: Date.now(),
+      name: names[Math.floor(Math.random()*names.length)],
+      stage: 0,
+      health: 70 + Math.floor(Math.random()*30)
+    };
+    state.plants.push(plant);
+
+    log(`你趁大家不注意，悄悄種下了「${plant.name}」。`);
+    updateStatus();
+    checkAchievements();
+  }
+
+  function doWater() {
+    if (state.energy <= 0) return log("你拿起水壺，又放回去。覺得今天就先這樣吧。");
+    if (state.plants.length === 0) return log("花園裡還空空的，只有土跟你的上班靈魂。");
+
+    state.energy--;
+    let txt = "你假裝在想簡報內容，其實在幫每一株植物澆水：\n";
+    state.plants.forEach(p => {
+      const add = 5 + Math.floor(Math.random()*6);
+      p.health = Math.min(100, p.health + add);
+      txt += `  • ${p.name} 看起來有精神多了（+${add}）。\n`;
+    });
+    log(txt.trim());
+    updateStatus();
+  }
+
+  function doRest() {
+    if (state.energy <= 0) return log("你已經在放空了，再放下去可能會直接睡著。");
+    state.energy = 0;
+    const msgs = [
+      "你盯著螢幕上的數字，實際上腦袋整個放空。",
+      "你打開一份看起來很重的 Excel，結果只是讓它當背景。",
+      "耳機裡放著歌，你假裝在打字，其實只是在跟著節奏敲鍵盤。"
+    ];
+    log(msgs[Math.floor(Math.random()*msgs.length)]);
+    updateStatus();
+  }
+
+  function randomEvent() {
+    const r = Math.random();
+
+    if (r < 0.2) {
+      state.seeds += 1;
+      log("你在桌上角落發現一顆不知道什麼時候掉的種子，就順手撿起來收著。");
+    } else if (r < 0.4 && state.plants.length > 0) {
+      const p = state.plants[Math.floor(Math.random()*state.plants.length)];
+      const loss = 10 + Math.floor(Math.random()*11);
+      p.health -= loss;
+      if (p.health <= 0) {
+        log(`${p.name} 撐不過這幾天的環境，默默地枯掉了。`);
+        state.plants = state.plants.filter(x => x.id !== p.id);
+      } else {
+        log(`某個晚上，好像有蟲子來開趴，「${p.name}」被咬得亂七八糟（-${loss}）。`);
+      }
+    } else if (r < 0.6 && state.plants.length > 0) {
+      state.plants.forEach(p => {
+        if (p.stage < 3) p.stage++;
+      });
+      log("外面突然下一場雨，雖然你還是在辦公室，但植物們好像也長大了一點。");
+    } else {
+      log("這天平平淡淡過去，沒人發現你在這個小視窗裡偷閒。");
+    }
+  }
+
+  function nextDay() {
+    state.day++;
+    state.energy = 3;
+    randomEvent();
+    updateStatus();
+    checkAchievements();
+  }
+
+  // =============================
+  //       計時（只算遊戲畫面）
+  // =============================
+  setInterval(() => {
+    if (!document.body.classList.contains("stealth")) {
+      state.activeTime += 1;
+      updateStatus();
+      checkAchievements();
+      saveGame();
+    }
+  }, 1000);
+
+  // =============================
+  //       偽裝模式
+  // =============================
+  function toggleStealth() {
+    const entering = !document.body.classList.contains("stealth");
+    if (entering) {
+      state.stealthCount++;
+      checkAchievements();
+      saveGame();
+    }
+    document.body.classList.toggle("stealth");
+    updateStatus();
+  }
+
+  document.getElementById("toggleStealth").addEventListener("click", toggleStealth);
+
+  // =============================
+  //     按鈕 & 鍵盤事件
+  // =============================
+  document.getElementById("btnPlant").addEventListener("click", doPlant);
+  document.getElementById("btnWater").addEventListener("click", doWater);
+  document.getElementById("btnRest").addEventListener("click", doRest);
+  document.getElementById("btnNext").addEventListener("click", nextDay);
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "z" || e.key === "Z") doPlant();
+    if (e.key === "x" || e.key === "X") doWater();
+    if (e.key === "c" || e.key === "C") doRest();
+    if (e.key === "v" || e.key === "V") nextDay();
+    if (e.key === "s" || e.key === "S") toggleStealth();
+  });
+
+  // =============================
+  //        初始化
+  // =============================
+  initIntro();
+  updateStatus();
+  renderAchievements();
+  if (!logBox.textContent.trim()) {
+    log("系統啟動。歡迎來到你的上班偷閒小花園。");
+  }
+</script>
 </body>
 </html>
