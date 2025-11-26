@@ -197,7 +197,7 @@
   <div class="topbar">
     <div>
       <div class="title">OFFICE GARDEN / TEXT RPG</div>
-      <div class="subtitle">上班偷閒小花園　── 單機、小小一格 DOS 風視窗</div>
+      <div class="subtitle">上班偷閒小花園　── DOS 風小視窗，內建被抓包風險</div>
     </div>
     <button class="btn-stealth" id="toggleStealth">STEALTH MODE</button>
   </div>
@@ -219,7 +219,7 @@
         </div>
         <div class="hint">
           熱鍵：Z=種植　X=澆水　C=放空　V=下一天　S=偽裝模式<br>
-          進度會存到這台電腦裡，下次開同一個瀏覽器可以繼續玩。
+          進度會存到這台電腦，同一個瀏覽器下次開可以接著玩。
         </div>
       </div>
 
@@ -261,17 +261,19 @@
   // =============================
   //         基本狀態
   // =============================
-  const SAVE_KEY = "officeGardenTextRPG_DOS_TW";
+  const SAVE_KEY = "officeGardenTextRPG_DOS_TW_v2";
 
   let state = {
     day: 1,
     energy: 3,
     seeds: 3,
-    plants: [],        // {id,name,stage,health}
-    totalPlanted: 0,   // 累計種過幾顆
-    stealthCount: 0,   // 上班偽裝次數
-    activeTime: 0,     // 遊戲畫面累計秒數
-    achievementsUnlocked: [], // 已解鎖成就 id
+    plants: [],         // {id,name,stage,health}
+    totalPlanted: 0,    // 累計種過幾顆
+    stealthCount: 0,    // 上班偽裝次數
+    activeTime: 0,      // 遊戲畫面累積秒數
+    suspicion: 0,       // 0–100 被抓包風險
+    timesCaught: 0,     // 被抓包次數
+    achievementsUnlocked: [],
     logIntroShown: false
   };
 
@@ -284,6 +286,8 @@
       if (state.totalPlanted == null) state.totalPlanted = 0;
       if (state.stealthCount == null) state.stealthCount = 0;
       if (state.activeTime == null) state.activeTime = 0;
+      if (state.suspicion == null) state.suspicion = 0;
+      if (state.timesCaught == null) state.timesCaught = 0;
       if (!Array.isArray(state.achievementsUnlocked)) state.achievementsUnlocked = [];
     } catch(e) {
       console.warn("存檔壞掉，改用預設值");
@@ -313,6 +317,15 @@
     return `${h}小時 ${m}分 ${s}秒`;
   }
 
+  function clampSuspicion() {
+    state.suspicion = Math.max(0, Math.min(100, state.suspicion));
+  }
+
+  function addSuspicion(v) {
+    state.suspicion += v;
+    clampSuspicion();
+  }
+
   function updateStatus() {
     const plantCount = state.plants.length;
     const mature = state.plants.filter(p => p.stage >= 3).length;
@@ -323,19 +336,22 @@
       <span>種子 ${state.seeds}</span>
       <span>植物 ${plantCount}</span>
       <span>成熟 ${mature}</span>
+      <span>風險 ${state.suspicion}/100</span>
     `;
 
     extraStatus.innerHTML = `
       上班偽裝次數：${state.stealthCount} 次<br>
       在花園偷閒時間：${formatTime(state.activeTime)}<br>
-      累計種下種子：${state.totalPlanted} 顆
+      累計種下種子：${state.totalPlanted} 顆<br>
+      被抓包記錄：${state.timesCaught} 次
     `;
   }
 
   function initIntro() {
     if (state.logIntroShown) return;
     log("你在螢幕的一小角，開了一個只屬於自己的『上班偷閒小花園』。");
-    log("外面看起來是工作視窗，其實裡面默默地種著幾顆沒人知道的植物。");
+    log("外面看起來是工作視窗，其實裡面悄悄種著幾顆只有你知道的植物。");
+    log("只是要小心，偷閒偷太兇，主管總有一天會覺得你怪怪的。");
     state.logIntroShown = true;
   }
 
@@ -372,6 +388,18 @@
       name: "加班戰士",
       desc: "在這個花園裡活過 10 天，代表你上班也活過了不少天。",
       check: (s) => s.day >= 10
+    },
+    {
+      id: "safe_farmer",
+      name: "穩穩偷閒",
+      desc: "同時擁有至少 5 株植物，風險還維持在 40 以下。",
+      check: (s) => s.plants.length >= 5 && s.suspicion < 40
+    },
+    {
+      id: "caught_once",
+      name: "被抓過還不怕",
+      desc: "正式被抓包過一次，但你還是回來繼續種。",
+      check: (s) => s.timesCaught >= 1
     }
   ];
 
@@ -413,11 +441,12 @@
   function doPlant() {
     if (state.energy <= 0) return log("你今天已經懶到連彎腰種東西都不想。");
     if (state.seeds <= 0) return log("口袋翻一圈，今天的種子已經全用光了。");
-    if (state.plants.length >= 8) return log("這塊小小的角落暫時容不下更多植物。");
+    if (state.plants.length >= 8) return log("這塊小角落暫時容不下更多植物，太明顯會被發現。");
 
     state.energy--;
     state.seeds--;
     state.totalPlanted++;
+    addSuspicion(10); // 種東西很明顯，在偷閒
 
     const names = ["桌角小草", "會議室盆栽", "加班仙人掌", "咖啡樹苗", "窗邊小葉子"];
     const plant = {
@@ -428,7 +457,7 @@
     };
     state.plants.push(plant);
 
-    log(`你趁大家不注意，悄悄種下了「${plant.name}」。`);
+    log(`你趁大家不注意，悄悄種下了「${plant.name}」。風險微微上升。`);
     updateStatus();
     checkAchievements();
   }
@@ -438,6 +467,8 @@
     if (state.plants.length === 0) return log("花園裡還空空的，只有土跟你的上班靈魂。");
 
     state.energy--;
+    addSuspicion(8); // 巡視＋澆水也算偷閒
+
     let txt = "你假裝在想簡報內容，其實在幫每一株植物澆水：\n";
     state.plants.forEach(p => {
       const add = 5 + Math.floor(Math.random()*6);
@@ -446,11 +477,14 @@
     });
     log(txt.trim());
     updateStatus();
+    checkAchievements();
   }
 
   function doRest() {
     if (state.energy <= 0) return log("你已經在放空了，再放下去可能會直接睡著。");
     state.energy = 0;
+    addSuspicion(6); // 明顯沒在工作
+
     const msgs = [
       "你盯著螢幕上的數字，實際上腦袋整個放空。",
       "你打開一份看起來很重的 Excel，結果只是讓它當背景。",
@@ -458,6 +492,35 @@
     ];
     log(msgs[Math.floor(Math.random()*msgs.length)]);
     updateStatus();
+    checkAchievements();
+  }
+
+  // =============================
+  //    根據風險觸發事件（被抓包等）
+  // =============================
+  function handleSuspicionEvents() {
+    if (state.suspicion >= 100) {
+      // 正式被抓包
+      state.timesCaught++;
+      log("今天主管直接叫你過去聊聊，感覺你最近『狀態怪怪的』。");
+      log("你只好假裝很檢討，回座位時發現花園一片空白，好像什麼都沒發生過。");
+      state.plants = [];
+      state.seeds = Math.max(0, state.seeds - 2);
+      state.suspicion = 40; // 還是有點陰影
+      checkAchievements();
+      return true; // 已經處理重大事件
+    }
+
+    if (state.suspicion >= 70) {
+      // 高風險：有機率被關切
+      if (Math.random() < 0.6) {
+        log("主管今天特別常在你座位附近晃來晃去，你決定明天還是低調一點。");
+        // 隔天可用體力少一點
+        state.energy = Math.max(1, state.energy - 1);
+        return false;
+      }
+    }
+    return false;
   }
 
   function randomEvent() {
@@ -489,13 +552,22 @@
   function nextDay() {
     state.day++;
     state.energy = 3;
-    randomEvent();
+
+    // 每天結算風險：稍微自然下降
+    state.suspicion = Math.max(0, state.suspicion - 15);
+
+    // 先看風險會不會觸發重大事件
+    const caught = handleSuspicionEvents();
+    if (!caught) {
+      randomEvent();
+    }
+
     updateStatus();
     checkAchievements();
   }
 
   // =============================
-  //       計時（只算遊戲畫面）
+  //   計時（只算遊戲畫面，不算偽裝）
   // =============================
   setInterval(() => {
     if (!document.body.classList.contains("stealth")) {
@@ -513,6 +585,8 @@
     const entering = !document.body.classList.contains("stealth");
     if (entering) {
       state.stealthCount++;
+      // 裝忙一下，風險稍微往下掉
+      state.suspicion = Math.max(0, state.suspicion - 5);
       checkAchievements();
       saveGame();
     }
@@ -545,7 +619,7 @@
   updateStatus();
   renderAchievements();
   if (!logBox.textContent.trim()) {
-    log("系統啟動。歡迎來到你的上班偷閒小花園。");
+    log("系統啟動。歡迎回到你的上班偷閒小花園。");
   }
 </script>
 </body>
