@@ -1,5 +1,7 @@
 // app.js
 
+console.log("app.js loaded"); // 確認有載入
+
 // 從 Firebase CDN 載入模組版 SDK
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-app.js";
 import {
@@ -11,7 +13,7 @@ import {
   orderBy
 } from "https://www.gstatic.com/firebasejs/10.14.0/firebase-firestore.js";
 
-// ===== 你的 Firebase 設定（已套用你給的 config） =====
+// ===== 你的 Firebase 設定（用你給的 config） =====
 const firebaseConfig = {
   apiKey: "AIzaSyDsxwPxXP5O-MTQ0PXLbsTFIwP8jfP2BiA",
   authDomain: "office-garden-d2a31.firebaseapp.com",
@@ -25,8 +27,6 @@ const firebaseConfig = {
 // 初始化 Firebase & Firestore
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-
-// 指到 plants 這個 collection（會自動建立）
 const plantsRef = collection(db, "plants");
 
 // ===== DOM 元件 =====
@@ -34,6 +34,14 @@ const garden = document.getElementById("garden");
 const nameInput = document.getElementById("nameInput");
 const saveNameBtn = document.getElementById("saveName");
 const randomPlantBtn = document.getElementById("randomPlant");
+
+console.log("DOM elements:", { garden, nameInput, saveNameBtn, randomPlantBtn });
+
+// 防呆：如果抓不到元素，直接提醒（通常是 HTML id 名稱不對或 script 放錯位置）
+if (!garden || !nameInput || !saveNameBtn || !randomPlantBtn) {
+  alert("找不到畫面元素，請確認 index.html 裡的 id 名稱和 script 引用位置。");
+  throw new Error("Missing DOM elements");
+}
 
 // ===== 名稱（存在 localStorage）=====
 let myName = localStorage.getItem("officeGardenName") || "";
@@ -89,10 +97,18 @@ randomPlantBtn.addEventListener("click", () => {
 // ===== 即時監聽 Firestore（多人同步） =====
 const qPlants = query(plantsRef, orderBy("createdAt", "asc"));
 
-onSnapshot(qPlants, (snapshot) => {
-  const plants = snapshot.docs.map(doc => doc.data());
-  renderGarden(plants);
-});
+onSnapshot(
+  qPlants,
+  (snapshot) => {
+    const plants = snapshot.docs.map(doc => doc.data());
+    console.log("Current plants:", plants);
+    renderGarden(plants);
+  },
+  (error) => {
+    console.error("onSnapshot error:", error);
+    alert("讀取花園資料失敗，請檢查 Firestore 是否有開啟 & 規則設定。");
+  }
+);
 
 // ===== 把所有植物畫到畫面上 =====
 function renderGarden(plants) {
@@ -102,7 +118,7 @@ function renderGarden(plants) {
     const div = document.createElement("div");
     div.className = "plant";
 
-    // x 決定左右位置，y 這邊簡單固定在草地交界上方
+    // x 決定左右位置，y 簡單固定在草地交界上方
     div.style.left = `${p.x}%`;
     div.style.top = "60%";
 
@@ -113,3 +129,8 @@ function renderGarden(plants) {
     div.innerHTML = `
       <div>${icon}</div>
       <div class="owner">${p.owner}</div>
+    `;
+
+    garden.appendChild(div);
+  });
+}
